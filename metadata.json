@@ -1,0 +1,6 @@
+{
+  "name": "ঠাকুরগাঁও CLOTHING - AI Prompt Gallery & Monetized Hub",
+  "description": "Showcase of AI-generated photos and streetwear apparel design prompts with Thakurgaon Clothing branding, integrated copy-ad unlock mechanism, and comprehensive admin panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

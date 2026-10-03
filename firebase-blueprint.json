@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Prompt": {
+      "title": "Prompt",
+      "description": "An AI Art prompt item with image, model, tags, and engagement counters.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the prompt item" },
+        "titleBn": { "type": "string", "description": "Bengali title of the prompt item" },
+        "prompt": { "type": "string", "description": "The exact AI prompt text" },
+        "negativePrompt": { "type": "string", "description": "Negative prompt text" },
+        "imageUrl": { "type": "string", "description": "URL or path of the generated art image" },
+        "model": { "type": "string", "description": "Target AI model (e.g. Midjourney v6, Flux)" },
+        "category": { "type": "string", "description": "Category identifier" },
+        "aspectRatio": { "type": "string", "description": "Aspect ratio (e.g. 4:3, 16:9)" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Keywords and tags"
+        },
+        "seed": { "type": "string", "description": "Generation seed" },
+        "cfgScale": { "type": "number", "description": "Guidance scale" },
+        "sampler": { "type": "string", "description": "Sampler name" },
+        "views": { "type": "number", "description": "Total views count" },
+        "copyCount": { "type": "number", "description": "Total copies count" },
+        "likes": { "type": "number", "description": "Total likes count" },
+        "isFeatured": { "type": "boolean", "description": "Whether item is featured on homepage" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "ISO timestamp" }
+      },
+      "required": ["title", "prompt", "imageUrl", "model", "category", "aspectRatio", "createdAt"]
+    },
+    "AdCampaign": {
+      "title": "AdCampaign",
+      "description": "Sponsored advertising campaign configuration.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Ad campaign headline" },
+        "sponsorName": { "type": "string", "description": "Name of the sponsor" },
+        "description": { "type": "string", "description": "Campaign summary" },
+        "imageUrl": { "type": "string", "description": "Ad banner image URL" },
+        "targetUrl": { "type": "string", "description": "Destination link URL" },
+        "buttonText": { "type": "string", "description": "Call to action button text" },
+        "badgeText": { "type": "string", "description": "Sponsor badge text" },
+        "active": { "type": "boolean", "description": "Whether ad is active" },
+        "cpmRate": { "type": "number", "description": "CPM earnings rate" },
+        "cpcRate": { "type": "number", "description": "CPC earnings rate" }
+      },
+      "required": ["title", "sponsorName", "imageUrl", "targetUrl", "buttonText", "active"]
+    },
+    "AdSettings": {
+      "title": "AdSettings",
+      "description": "Global ad settings and monetization parameters.",
+      "type": "object",
+      "properties": {
+        "adWallEnabled": { "type": "boolean" },
+        "countdownSeconds": { "type": "number" },
+        "allowInstantSkip": { "type": "boolean" },
+        "activeCampaignId": { "type": "string" },
+        "showInFeedBanners": { "type": "boolean" },
+        "bannerFrequency": { "type": "number" },
+        "adNetworkMode": { "type": "string" },
+        "adsensePublisherId": { "type": "string" }
+      },
+      "required": ["adWallEnabled", "countdownSeconds", "showInFeedBanners"]
+    }
+  },
+  "firestore": {
+    "/prompts/{promptId}": {
+      "schema": { "$ref": "#/entities/Prompt" },
+      "description": "Collection of all AI prompt gallery items."
+    },
+    "/adCampaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/AdCampaign" },
+      "description": "Collection of sponsor ad campaigns."
+    },
+    "/settings/ads": {
+      "schema": { "$ref": "#/entities/AdSettings" },
+      "description": "Document holding site-wide ad wall and monetization settings."
+    }
+  }
+}

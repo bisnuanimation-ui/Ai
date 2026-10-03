@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', 'Hind Siliguri', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #f6eee7;
+    color: #2b231f;
+    overflow-x: hidden;
+  }
+}
+
+.font-display {
+  font-family: 'Syne', 'Plus Jakarta Sans', sans-serif;
+}
+
+.font-bengali {
+  font-family: 'Hind Siliguri', sans-serif;
+}
+
+/* Manga/Anime Screen Tone Pattern Overlay */
+.manga-screentone-bg {
+  background-image: radial-gradient(#ea8754 0.8px, transparent 0.8px), radial-gradient(#ea8754 0.8px, #fbf7f4 0.8px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+  opacity: 0.08;
+}
+
+/* Apricot Diagonal Split Banner */
+.apricot-diagonal-bg {
+  background: linear-gradient(135deg, #ea8754 0%, #f4a274 50%, #fef8f4 50.1%, #ffffff 100%);
+}
+
+/* Animations */
+@keyframes shimmerSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(0.5deg);
+  }
+}
+
+@keyframes coralPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(234, 135, 84, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(234, 135, 84, 0.7);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmerSweep 2.5s infinite;
+}
+
+.animate-float-gentle {
+  animation: floatGentle 5s ease-in-out infinite;
+}
+
+.animate-coral-pulse {
+  animation: coralPulse 3s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f6eee7;
+}
+::-webkit-scrollbar-thumb {
+  background: #e4c7b5;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ea8754;
+}
+
+
