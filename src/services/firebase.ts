@@ -71,6 +71,16 @@ export function cleanForFirebase<T extends Record<string, any>>(obj: T): T {
   return cleaned as T;
 }
 
+// Generic helper to prevent Firebase writes from hanging indefinitely when database is blocked or offline
+const runWithTimeout = <T>(promise: Promise<T>, timeoutMs: number = 3000): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Firebase operation timeout')), timeoutMs)
+    ),
+  ]);
+};
+
 // Dual-Engine Firebase Service (Firestore + Realtime Database)
 export const firestoreService = {
   // Real-time listener for live sync across all devices
@@ -160,21 +170,25 @@ export const firestoreService = {
     };
   },
 
-  // Save prompt to BOTH Firestore & Realtime Database
+  // Save prompt to BOTH Firestore & Realtime Database with strict timeouts
   savePrompt: async (prompt: PromptItem): Promise<boolean> => {
     try {
       const sanitized = cleanForFirebase(prompt);
 
-      // 1. Save to Firestore
-      const docRef = doc(db, 'prompts', sanitized.id);
-      await setDoc(docRef, sanitized, { merge: true });
+      // 1. Save to Firestore (max 3 seconds)
+      try {
+        const docRef = doc(db, 'prompts', sanitized.id);
+        await runWithTimeout(setDoc(docRef, sanitized, { merge: true }), 3000);
+      } catch (fsErr) {
+        console.warn('Firestore write timed out or failed, proceeding to RTDB backup...', fsErr);
+      }
 
-      // 2. Save to Realtime Database
+      // 2. Save to Realtime Database (max 2 seconds)
       try {
         const itemRef = rtdbRef(rtdb, `prompts/${sanitized.id}`);
-        await rtdbSet(itemRef, sanitized);
+        await runWithTimeout(rtdbSet(itemRef, sanitized), 2000);
       } catch (rtdbErr) {
-        console.warn('Realtime database sync note:', rtdbErr);
+        console.warn('Realtime database sync timed out or note:', rtdbErr);
       }
 
       return true;
@@ -184,15 +198,21 @@ export const firestoreService = {
     }
   },
 
-  // Delete prompt from BOTH Firestore & Realtime Database
+  // Delete prompt from BOTH Firestore & Realtime Database with strict timeouts
   deletePrompt: async (promptId: string): Promise<boolean> => {
     try {
-      const docRef = doc(db, 'prompts', promptId);
-      await deleteDoc(docRef);
+      // 1. Delete from Firestore (max 2.5 seconds)
+      try {
+        const docRef = doc(db, 'prompts', promptId);
+        await runWithTimeout(deleteDoc(docRef), 2500);
+      } catch (fsErr) {
+        console.warn('Firestore delete timed out or failed, proceeding to RTDB...', fsErr);
+      }
 
+      // 2. Delete from Realtime Database (max 2 seconds)
       try {
         const itemRef = rtdbRef(rtdb, `prompts/${promptId}`);
-        await rtdbRemove(itemRef);
+        await runWithTimeout(rtdbRemove(itemRef), 2000);
       } catch (rtdbErr) {
         console.warn('Realtime database remove note:', rtdbErr);
       }
@@ -204,21 +224,25 @@ export const firestoreService = {
     }
   },
 
-  // Update prompt engagement counter (likes / copies / views)
+  // Update prompt engagement counter (likes / copies / views) with timeouts
   incrementEngagement: async (
     promptId: string,
     field: 'likes' | 'copyCount' | 'views',
     newValue: number
   ) => {
     try {
-      const docRef = doc(db, 'prompts', promptId);
-      await updateDoc(docRef, { [field]: newValue });
+      try {
+        const docRef = doc(db, 'prompts', promptId);
+        await runWithTimeout(updateDoc(docRef, { [field]: newValue }), 2000);
+      } catch (e) {
+        console.warn('Firestore engagement update skipped:', e);
+      }
 
       try {
         const fieldRef = rtdbRef(rtdb, `prompts/${promptId}/${field}`);
-        await rtdbSet(fieldRef, newValue);
+        await runWithTimeout(rtdbSet(fieldRef, newValue), 1500);
       } catch (e) {
-        // ignore
+        console.warn('RTDB engagement update skipped:', e);
       }
     } catch (err) {
       console.warn('Failed to update engagement on Firebase:', err);
