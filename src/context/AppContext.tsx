@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PromptItem, AdCampaign, AdSettings, AdAnalytics, Language } from '../types';
 import { storage } from '../services/storage';
 import { firestoreService } from '../services/firebase';
+import { supabaseService } from '../services/supabase';
 import { copyToClipboard } from '../utils/clipboard';
 
 interface AppContextType {
@@ -187,9 +188,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAnalytics({ ...newAnalytics });
   };
 
-  // Helper to upload image if it's base64 data URL
+  // Helper to upload image permanently to cloud with multiple fallback layers
   const uploadImageIfNeeded = async (imgUrl: string): Promise<string> => {
     if (imgUrl && imgUrl.startsWith('data:image/')) {
+      // 1. Try to upload permanently to Supabase Storage first ('Bisun Roy' Bucket)
+      try {
+        const supabaseUrl = await supabaseService.uploadImageToSupabase(imgUrl);
+        if (supabaseUrl && supabaseUrl.startsWith('http') && !supabaseUrl.startsWith('data:')) {
+          return supabaseUrl;
+        }
+      } catch (err) {
+        console.warn('Supabase Storage upload skipped/failed, trying Firebase Storage...', err);
+      }
+
+      // 2. Try Firebase Storage
+      try {
+        const cloudUrl = await firestoreService.uploadImageToStorage(imgUrl);
+        if (cloudUrl && cloudUrl.startsWith('http') && !cloudUrl.startsWith('data:')) {
+          return cloudUrl;
+        }
+      } catch (err) {
+        console.warn('Firebase Storage upload skipped, trying server API fallback...', err);
+      }
+
+      // 3. Fallback to server /api/upload
       try {
         const res = await fetch('/api/upload', {
           method: 'POST',

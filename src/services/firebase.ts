@@ -9,20 +9,22 @@ import {
   updateDoc,
   onSnapshot,
   getDocFromServer,
+  setLogLevel,
 } from 'firebase/firestore';
 import { getDatabase, ref as rtdbRef, set as rtdbSet, remove as rtdbRemove, onValue as rtdbOnValue } from 'firebase/database';
+import { getStorage, ref as sRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { PromptItem } from '../types';
 
 // Web app's Firebase configuration provided by user
 export const firebaseConfig = {
-  apiKey: "AIzaSyBsQgRKdlPbhbd-xz4zndbMEaGKGZMnJ6k",
-  authDomain: "gen-lang-client-0348323359.firebaseapp.com",
-  databaseURL: "https://gen-lang-client-0348323359-default-rtdb.firebaseio.com",
-  projectId: "gen-lang-client-0348323359",
-  storageBucket: "gen-lang-client-0348323359.firebasestorage.app",
-  messagingSenderId: "808013921358",
-  appId: "1:808013921358:web:d3a4aa1bb85a808097d71f",
-  firestoreDatabaseId: "ai-studio-adsenseaiphotopo-8ece1d3b-b554-4a8e-b22e-7c07f033f158",
+  apiKey: "AIzaSyCxCWbClonFQDFJXvm3KGE1u1QvgXCrYX4",
+  authDomain: "aill-73ce8.firebaseapp.com",
+  databaseURL: "https://aill-73ce8-default-rtdb.firebaseio.com",
+  projectId: "aill-73ce8",
+  storageBucket: "aill-73ce8.firebasestorage.app",
+  messagingSenderId: "67541098808",
+  appId: "1:67541098808:web:8334b9b5f40f354a4a21cd",
+  firestoreDatabaseId: "",
 };
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -30,6 +32,13 @@ export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = firebaseConfig.firestoreDatabaseId
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
+
+// Silence all background gRPC connection warning logs (like standard idle stream cancellation reports)
+try {
+  setLogLevel('error');
+} catch (e) {
+  // ignore
+}
 
 export const rtdb = getDatabase(app, firebaseConfig.databaseURL || 'https://gen-lang-client-0348323359-default-rtdb.firebaseio.com');
 
@@ -67,11 +76,49 @@ export const firestoreService = {
   // Real-time listener for live sync across all devices
   subscribeToPrompts: (callback: (prompts: PromptItem[]) => void) => {
     let unsubscribed = false;
+    let unsubscribeFirestore: (() => void) | null = null;
+    let unsubscribeRTDB: (() => void) | null = null;
+
+    const setupRTDBListener = () => {
+      try {
+        console.log('🔗 Connecting to Realtime Database (RTDB) sync engine...');
+        const rtdbPromptsRef = rtdbRef(rtdb, 'prompts');
+        unsubscribeRTDB = rtdbOnValue(
+          rtdbPromptsRef,
+          (snapshot) => {
+            if (!unsubscribed) {
+              const list: PromptItem[] = [];
+              const data = snapshot.val();
+              if (data && typeof data === 'object') {
+                Object.keys(data).forEach((id) => {
+                  list.push({
+                    ...data[id],
+                    id: id,
+                  });
+                });
+              }
+              list.sort((a, b) => {
+                // Sort featured/pinned first, then by createdAt descending
+                if (a.isFeatured && !b.isFeatured) return -1;
+                if (!a.isFeatured && b.isFeatured) return 1;
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              });
+              callback(list);
+            }
+          },
+          (rtdbErr) => {
+            console.warn('RTDB listen subscription notice:', rtdbErr);
+          }
+        );
+      } catch (err) {
+        console.warn('Failed to bind RTDB fallback listener:', err);
+      }
+    };
 
     // Subscribe to Firestore as the single real-time source of truth
     try {
       const promptsCol = collection(db, 'prompts');
-      const unsubscribeFirestore = onSnapshot(
+      unsubscribeFirestore = onSnapshot(
         promptsCol,
         (snapshot) => {
           if (!unsubscribed) {
@@ -83,29 +130,34 @@ export const firestoreService = {
                 id: docSnap.id,
               });
             });
-            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            list.sort((a, b) => {
+              if (a.isFeatured && !b.isFeatured) return -1;
+              if (!a.isFeatured && b.isFeatured) return 1;
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
             callback(list);
           }
         },
         (error) => {
-          // Quietly ignore normal background stream disconnects to keep console clean
-          if (error && (error.message?.includes('CANCELLED') || error.message?.includes('idle stream') || error.message?.includes('Disconnecting idle stream'))) {
-            return;
+          // If Firestore is exhausted/quota limit hit, immediately switch to RTDB!
+          console.warn('Firestore subscription restricted (quota or connection). Switching to Realtime Database engine...', error);
+          if (!unsubscribed && !unsubscribeRTDB) {
+            setupRTDBListener();
           }
-          console.warn('Firestore subscription notice:', error);
         }
       );
-
-      return () => {
-        unsubscribed = true;
-        unsubscribeFirestore();
-      };
     } catch (e) {
-      console.warn('Failed to subscribe to firestore:', e);
-      return () => {
-        unsubscribed = true;
-      };
+      console.warn('Firestore connection failed on subscribe. Swapping to RTDB...', e);
+      if (!unsubscribed && !unsubscribeRTDB) {
+        setupRTDBListener();
+      }
     }
+
+    return () => {
+      unsubscribed = true;
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      if (unsubscribeRTDB) unsubscribeRTDB();
+    };
   },
 
   // Save prompt to BOTH Firestore & Realtime Database
@@ -190,6 +242,33 @@ export const firestoreService = {
       }
     } catch (err) {
       console.warn('Syncing prompts to Firebase note:', err);
+    }
+  },
+
+  // Permanent, serverless cloud upload to Firebase Storage with strict 2-second timeout
+  uploadImageToStorage: async (imageBase64: string): Promise<string> => {
+    if (!imageBase64 || !imageBase64.startsWith('data:image/')) {
+      return imageBase64;
+    }
+    try {
+      const storageInstance = getStorage(app);
+      const filename = `prompts/img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
+      const fileRef = sRef(storageInstance, filename);
+      
+      const uploadPromise = (async () => {
+        const uploadResult = await uploadString(fileRef, imageBase64, 'data_url');
+        const downloadUrl = await getDownloadURL(uploadResult.ref);
+        return downloadUrl;
+      })();
+
+      const timeoutPromise = new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('Firebase Storage upload timeout (2s)')), 2000)
+      );
+
+      return await Promise.race([uploadPromise, timeoutPromise]);
+    } catch (err) {
+      console.warn('Firebase Storage upload timed out, disabled, or failed. Swapping to backup:', err);
+      throw err;
     }
   },
 };
