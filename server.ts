@@ -3,8 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,10 +14,9 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Ensure data and upload directories exist (use /tmp on Google Cloud Run to bypass read-only filesystem limits)
-const isCloudRun = process.env.NODE_ENV === 'production' || process.env.PORT !== undefined;
-const DATA_DIR = isCloudRun ? path.resolve('/tmp', 'data') : path.resolve(__dirname, 'data');
-const UPLOADS_DIR = isCloudRun ? path.resolve('/tmp', 'uploads') : path.resolve(__dirname, 'public', 'uploads');
+// Ensure data and upload directories exist
+const DATA_DIR = path.resolve(__dirname, 'data');
+const UPLOADS_DIR = path.resolve(__dirname, 'public', 'uploads');
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -34,22 +31,6 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 const PROMPTS_FILE = path.resolve(DATA_DIR, 'prompts.json');
 const AD_SETTINGS_FILE = path.resolve(DATA_DIR, 'ad_settings.json');
 const AD_CAMPAIGNS_FILE = path.resolve(DATA_DIR, 'ad_campaigns.json');
-
-// Initialize Firebase App and Firestore database on server
-const firebaseConfigPath = path.resolve(__dirname, 'firebase-applet-config.json');
-let db: any = null;
-try {
-  if (fs.existsSync(firebaseConfigPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf-8'));
-    const firebaseApp = initializeApp(firebaseConfig);
-    db = firebaseConfig.firestoreDatabaseId
-      ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
-      : getFirestore(firebaseApp);
-    console.log('Firebase Firestore initialized successfully on server!');
-  }
-} catch (err) {
-  console.error('Failed to initialize Firebase Firestore on server:', err);
-}
 
 // Helper to read JSON file
 function readJsonFile<T>(filePath: string, fallback: T): T {
@@ -73,8 +54,78 @@ function writeJsonFile<T>(filePath: string, data: T) {
   }
 }
 
-// Initial seed prompts if none exist (Empty by user request so they can upload their own preferred images)
-const DEFAULT_SEED_PROMPTS: any[] = [];
+// Initial seed prompts if none exist
+const DEFAULT_SEED_PROMPTS = [
+  {
+    id: 'prompt-1',
+    title: 'Cybernetic Neon Bengal Tiger',
+    titleBn: 'সাইবারনেটিক নিয়ন রয়েল বেঙ্গল টাইগার',
+    prompt:
+      'Majestic cyberpunk mechanical Bengal tiger with neon cyan fiber-optic stripes and glowing eyes walking in rain-soaked futuristic alleyway, ultra realistic 8k, cinematic reflections, chromatic aberration, volumetric smoke, octane render --ar 4:3 --v 6.0 --style raw',
+    negativePrompt:
+      'blurry, low resolution, deformed limbs, watermark, cartoon, oversaturated, amateur, duplicate heads',
+    imageUrl:
+      'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
+    model: 'Midjourney v6',
+    category: 'cyberpunk',
+    aspectRatio: '4:3',
+    tags: ['Cyberpunk', 'Tiger', 'Neon', 'Futuristic', 'Dhaka', 'Octane'],
+    seed: '84920194',
+    cfgScale: 7.5,
+    sampler: 'Euler a',
+    views: 1840,
+    copyCount: 429,
+    likes: 312,
+    isFeatured: true,
+    createdAt: '2026-03-28T14:20:00Z',
+  },
+  {
+    id: 'prompt-2',
+    title: 'Celestial Queen of Starlight',
+    titleBn: 'নক্ষত্রলোকীয় স্বর্গীয় রাজকুমারী',
+    prompt:
+      'Hyper-realistic editorial portrait of a celestial queen with iridescent crystalline jewelry and luminescent stardust cosmetic details, soft dramatic studio lighting, high fashion magazine aesthetic, 85mm lens f/1.4, delicate skin texture, micro pores --ar 4:3 --stylize 250 --v 6.0',
+    negativePrompt:
+      'plastic skin, airbrushed, oversaturated, fake eyes, low quality, bad anatomy',
+    imageUrl:
+      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&auto=format&fit=crop&q=80',
+    model: 'Midjourney v6',
+    category: 'portrait',
+    aspectRatio: '4:3',
+    tags: ['Portrait', 'Fashion', 'Celestial', 'Jewelry', 'Editorial', '85mm'],
+    seed: '39201844',
+    cfgScale: 8.0,
+    sampler: 'DPM++ 2M Karras',
+    views: 2420,
+    copyCount: 681,
+    likes: 549,
+    isFeatured: true,
+    createdAt: '2026-03-29T10:15:00Z',
+  },
+  {
+    id: 'prompt-3',
+    title: 'Solarpunk Vertical Eco-Metropolis',
+    titleBn: 'সোলারপাঙ্ক উল্লম্ব ইকো-মেট্রোপলিস',
+    prompt:
+      'Panoramic wide-angle view of a sustainable solarpunk city with lush hanging botanical gardens on futuristic spiraling skyscrapers, elevated maglev hyperloop trains, golden afternoon sunlight, solar crystal glass domes, utopian architecture --ar 4:3 --v 6.0',
+    negativePrompt:
+      'smog, industrial pollution, dystopian, concrete wasteland, muddy textures',
+    imageUrl:
+      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
+    model: 'Flux.1 Schnell',
+    category: 'architecture',
+    aspectRatio: '4:3',
+    tags: ['Solarpunk', 'Architecture', 'GreenCity', 'Eco', 'Futuristic'],
+    seed: '19284019',
+    cfgScale: 6.5,
+    sampler: 'Euler',
+    views: 1290,
+    copyCount: 310,
+    likes: 275,
+    isFeatured: false,
+    createdAt: '2026-03-29T16:45:00Z',
+  },
+];
 
 // Initialize JSON files if missing
 if (!fs.existsSync(PROMPTS_FILE)) {
@@ -91,18 +142,17 @@ app.post('/api/upload', (req, res) => {
       return res.status(400).json({ error: 'Missing or invalid imageBase64' });
     }
 
-    // Robust base64 extraction to prevent corrupted files
-    let base64Data = imageBase64;
+    // Match data:image/png;base64,...
+    const matches = imageBase64.match(/^data:image\/([a-zA-Z+]+);base64,(.+)$/);
     let ext = 'jpg';
+    let dataBuffer: Buffer;
 
-    if (imageBase64.includes(';base64,')) {
-      const parts = imageBase64.split(';base64,');
-      base64Data = parts[1];
-      const mime = parts[0].split('data:image/')[1];
-      ext = mime === 'jpeg' ? 'jpg' : mime;
+    if (matches && matches.length === 3) {
+      ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+      dataBuffer = Buffer.from(matches[2], 'base64');
+    } else {
+      dataBuffer = Buffer.from(imageBase64, 'base64');
     }
-
-    const dataBuffer = Buffer.from(base64Data, 'base64');
 
     const safeName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
     const filePath = path.resolve(UPLOADS_DIR, safeName);
@@ -117,46 +167,21 @@ app.post('/api/upload', (req, res) => {
   }
 });
 
-// 2. GET all prompts (High-speed JSON cache to completely avoid Firestore Quota limits and lag)
+// 2. GET all prompts (Live across all clients)
 app.get('/api/prompts', (req, res) => {
   const prompts = readJsonFile(PROMPTS_FILE, DEFAULT_SEED_PROMPTS);
   res.json(prompts);
 });
 
-// Seed local JSON cache from Firestore on boot if possible to keep them perfectly synced
-async function syncLocalWithFirestoreOnBoot() {
-  try {
-    if (db) {
-      console.log('Syncing local JSON cache with Firestore on boot...');
-      const promptsCol = collection(db, 'prompts');
-      const snapshot = await getDocs(promptsCol);
-      if (!snapshot.empty) {
-        const list: any[] = [];
-        snapshot.forEach((docSnap) => {
-          list.push({
-            ...docSnap.data(),
-            id: docSnap.id,
-          });
-        });
-        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        writeJsonFile(PROMPTS_FILE, list);
-        console.log(`Successfully synced ${list.length} prompts from Firestore to local cache on boot!`);
-      }
-    }
-  } catch (err) {
-    console.warn('Firestore boot sync skipped or quota-exceeded, using local JSON cache:', err);
-  }
-}
-syncLocalWithFirestoreOnBoot();
-
-// 3. POST new prompt (Saves to Firestore and backs up to server JSON)
-app.post('/api/prompts', async (req, res) => {
+// 3. POST new prompt (Saves to server and broadcasts)
+app.post('/api/prompts', (req, res) => {
   try {
     const newPrompt = req.body;
     if (!newPrompt || !newPrompt.prompt) {
       return res.status(400).json({ error: 'Invalid prompt payload' });
     }
 
+    const prompts = readJsonFile<any[]>(PROMPTS_FILE, DEFAULT_SEED_PROMPTS);
     const fullItem = {
       ...newPrompt,
       id: newPrompt.id || `prompt-${Date.now()}`,
@@ -166,18 +191,7 @@ app.post('/api/prompts', async (req, res) => {
       createdAt: newPrompt.createdAt || new Date().toISOString(),
     };
 
-    // Save to Firestore server-side
-    try {
-      if (db) {
-        const docRef = doc(db, 'prompts', fullItem.id);
-        await setDoc(docRef, fullItem, { merge: true });
-      }
-    } catch (fsErr) {
-      console.error('Server failed to save to Firestore:', fsErr);
-    }
-
-    // Save to server backup file
-    const prompts = readJsonFile<any[]>(PROMPTS_FILE, DEFAULT_SEED_PROMPTS);
+    // Add to beginning
     const updated = [fullItem, ...prompts.filter((p) => p.id !== fullItem.id)];
     writeJsonFile(PROMPTS_FILE, updated);
 
@@ -188,58 +202,35 @@ app.post('/api/prompts', async (req, res) => {
   }
 });
 
-// 4. PUT update prompt (Saves to Firestore and updates server JSON)
-app.put('/api/prompts/:id', async (req, res) => {
+// 4. PUT update prompt
+app.put('/api/prompts/:id', (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
-
-    // Update in Firestore server-side
-    try {
-      if (db) {
-        const docRef = doc(db, 'prompts', id);
-        await setDoc(docRef, updateData, { merge: true });
-      }
-    } catch (fsErr) {
-      console.error('Server failed to update in Firestore:', fsErr);
-    }
-
-    // Update in server backup file
     const prompts = readJsonFile<any[]>(PROMPTS_FILE, DEFAULT_SEED_PROMPTS);
+
     const index = prompts.findIndex((p) => p.id === id);
-    if (index !== -1) {
-      prompts[index] = { ...prompts[index], ...updateData };
-      writeJsonFile(PROMPTS_FILE, prompts);
-      res.json(prompts[index]);
-    } else {
-      res.json(updateData);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Prompt not found' });
     }
+
+    prompts[index] = { ...prompts[index], ...updateData };
+    writeJsonFile(PROMPTS_FILE, prompts);
+
+    res.json(prompts[index]);
   } catch (err: any) {
     console.error('Error updating prompt:', err);
     res.status(500).json({ error: 'Failed to update prompt' });
   }
 });
 
-// 5. DELETE prompt (Removes from Firestore and server JSON)
-app.delete('/api/prompts/:id', async (req, res) => {
+// 5. DELETE prompt
+app.delete('/api/prompts/:id', (req, res) => {
   try {
     const { id } = req.params;
-
-    // Delete from Firestore server-side
-    try {
-      if (db) {
-        const docRef = doc(db, 'prompts', id);
-        await deleteDoc(docRef);
-      }
-    } catch (fsErr) {
-      console.error('Server failed to delete from Firestore:', fsErr);
-    }
-
-    // Delete from server backup file
     const prompts = readJsonFile<any[]>(PROMPTS_FILE, DEFAULT_SEED_PROMPTS);
     const updated = prompts.filter((p) => p.id !== id);
     writeJsonFile(PROMPTS_FILE, updated);
-
     res.json({ success: true, id });
   } catch (err: any) {
     console.error('Error deleting prompt:', err);
@@ -247,20 +238,7 @@ app.delete('/api/prompts/:id', async (req, res) => {
   }
 });
 
-// 6. SEO & Monetization Endpoints: sw.js, robots.txt, sitemap.xml & Google verification file
-app.get('/sw.js', (req, res) => {
-  const swPath = path.resolve(__dirname, 'public', 'sw.js');
-  if (fs.existsSync(swPath)) {
-    res.type('application/javascript').sendFile(swPath);
-  } else {
-    res.status(404).send('Service worker file not found');
-  }
-});
-
-app.get('/google093853cd5988765b.html', (req, res) => {
-  res.type('text/html').send('google-site-verification: google093853cd5988765b.html\n');
-});
-
+// 6. SEO Endpoints: robots.txt & sitemap.xml
 app.get('/robots.txt', (req, res) => {
   const robotsPath = path.resolve(__dirname, 'public', 'robots.txt');
   if (fs.existsSync(robotsPath)) {

@@ -9,7 +9,6 @@ import { GeminiPromptStudio } from './components/GeminiPromptStudio';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { QuickPostModal } from './components/QuickPostModal';
-import { LegalModal, LegalTab } from './components/LegalModal';
 import { AnimeLogo } from './components/AnimeLogo';
 import { ThakurgaonLogo } from './components/ThakurgaonLogo';
 import { Sparkles, Shield, Filter, Search, Layers, CheckCircle, Plus, ChevronRight, ChevronLeft, MoreHorizontal, Award } from 'lucide-react';
@@ -40,15 +39,6 @@ const GalleryView: React.FC = () => {
   const [heroIndex, setHeroIndex] = useState(0);
   const [popularOffset, setPopularOffset] = useState(0);
   const [spotlightIndex, setSpotlightIndex] = useState(0);
-
-  // Legal Modal State (Privacy, Terms, About, Contact)
-  const [legalModalOpen, setLegalModalOpen] = useState(false);
-  const [legalTab, setLegalTab] = useState<LegalTab>('privacy');
-
-  const openLegal = (tab: LegalTab) => {
-    setLegalTab(tab);
-    setLegalModalOpen(true);
-  };
 
   // Top 3 anime showcase items
   const topAnimePrompts = prompts.slice(0, 3);
@@ -83,14 +73,7 @@ const GalleryView: React.FC = () => {
     return matchesCat && matchesModel && matchesQuery;
   });
 
-  // Sort Pinned (isFeatured) items first, then newer items chronologically
-  const sortedFilteredPrompts = [...filteredPrompts].sort((a, b) => {
-    if (a.isFeatured && !b.isFeatured) return -1;
-    if (!a.isFeatured && b.isFeatured) return 1;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
-
-  const featuredPrompt = topAnimePrompts[heroIndex] || sortedFilteredPrompts[0] || prompts[0];
+  const featuredPrompt = topAnimePrompts[heroIndex] || filteredPrompts[0] || prompts[0];
 
   // Most Popular items slice with wrap-around
   const popularCards = [
@@ -500,11 +483,11 @@ const GalleryView: React.FC = () => {
           <div className="text-xs text-[#6c5a52] font-semibold">
             {isBn ? (
               <span>
-                মোট <strong className="text-[#ea8754] font-mono">{sortedFilteredPrompts.length}</strong> টি প্রম্পট পাওয়া গেছে
+                মোট <strong className="text-[#ea8754] font-mono">{filteredPrompts.length}</strong> টি প্রম্পট পাওয়া গেছে
               </span>
             ) : (
               <span>
-                Showing <strong className="text-[#ea8754] font-mono">{sortedFilteredPrompts.length}</strong> master prompts
+                Showing <strong className="text-[#ea8754] font-mono">{filteredPrompts.length}</strong> master prompts
               </span>
             )}
           </div>
@@ -522,9 +505,9 @@ const GalleryView: React.FC = () => {
         </div>
 
         {/* Prompts Bento Grid */}
-        {sortedFilteredPrompts.length > 0 ? (
+        {filteredPrompts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sortedFilteredPrompts.map((prompt, idx) => (
+            {filteredPrompts.map((prompt, idx) => (
               <React.Fragment key={prompt.id}>
                 <PromptCard prompt={prompt} />
 
@@ -564,42 +547,14 @@ const GalleryView: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-[#6c5a52]">
-            <button
-              onClick={() => openLegal('privacy')}
-              className="hover:text-[#ea8754] transition-colors cursor-pointer"
-            >
-              {isBn ? 'গোপনীয়তা নীতি' : 'Privacy Policy'}
-            </button>
-            <span>·</span>
-            <button
-              onClick={() => openLegal('terms')}
-              className="hover:text-[#ea8754] transition-colors cursor-pointer"
-            >
-              {isBn ? 'ব্যবহারের শর্তাবলী' : 'Terms of Service'}
-            </button>
-            <span>·</span>
-            <button
-              onClick={() => openLegal('about')}
-              className="hover:text-[#ea8754] transition-colors cursor-pointer"
-            >
-              {isBn ? 'আমাদের সম্পর্কে' : 'About Us'}
-            </button>
-            <span>·</span>
-            <button
-              onClick={() => openLegal('contact')}
-              className="hover:text-[#ea8754] transition-colors cursor-pointer"
-            >
-              {isBn ? 'যোগাযোগ' : 'Contact'}
-            </button>
-            <span>·</span>
+          <div className="flex items-center gap-4 text-xs text-[#6c5a52]">
             <a
               href="https://www.facebook.com/share/14tSwFz9SXh/"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-[#1877F2] font-semibold hover:underline"
             >
-              <svg className="w-3.5 h-3.5 fill-[#1877F2]" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 fill-[#1877F2]" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
               </svg>
               <span>Facebook Page</span>
@@ -620,11 +575,6 @@ const GalleryView: React.FC = () => {
       <PromptDetailModal />
       <GeminiPromptStudio />
       <QuickPostModal isOpen={isQuickPostOpen} onClose={() => setIsQuickPostOpen(false)} />
-      <LegalModal
-        isOpen={legalModalOpen}
-        onClose={() => setLegalModalOpen(false)}
-        defaultTab={legalTab}
-      />
       <AdminLoginModal />
       <AdminDashboard />
 

@@ -9,22 +9,20 @@ import {
   updateDoc,
   onSnapshot,
   getDocFromServer,
-  setLogLevel,
 } from 'firebase/firestore';
 import { getDatabase, ref as rtdbRef, set as rtdbSet, remove as rtdbRemove, onValue as rtdbOnValue } from 'firebase/database';
-import { getStorage, ref as sRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { PromptItem } from '../types';
 
 // Web app's Firebase configuration provided by user
 export const firebaseConfig = {
-  apiKey: "AIzaSyCxCWbClonFQDFJXvm3KGE1u1QvgXCrYX4",
-  authDomain: "aill-73ce8.firebaseapp.com",
-  databaseURL: "https://aill-73ce8-default-rtdb.firebaseio.com",
-  projectId: "aill-73ce8",
-  storageBucket: "aill-73ce8.firebasestorage.app",
-  messagingSenderId: "67541098808",
-  appId: "1:67541098808:web:8334b9b5f40f354a4a21cd",
-  firestoreDatabaseId: "",
+  apiKey: "AIzaSyBsQgRKdlPbhbd-xz4zndbMEaGKGZMnJ6k",
+  authDomain: "gen-lang-client-0348323359.firebaseapp.com",
+  databaseURL: "https://gen-lang-client-0348323359-default-rtdb.firebaseio.com",
+  projectId: "gen-lang-client-0348323359",
+  storageBucket: "gen-lang-client-0348323359.firebasestorage.app",
+  messagingSenderId: "808013921358",
+  appId: "1:808013921358:web:d3a4aa1bb85a808097d71f",
+  firestoreDatabaseId: "ai-studio-adsenseaiphotopo-8ece1d3b-b554-4a8e-b22e-7c07f033f158",
 };
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -32,13 +30,6 @@ export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = firebaseConfig.firestoreDatabaseId
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
-
-// Silence all background gRPC connection warning logs (like standard idle stream cancellation reports)
-try {
-  setLogLevel('error');
-} catch (e) {
-  // ignore
-}
 
 export const rtdb = getDatabase(app, firebaseConfig.databaseURL || 'https://gen-lang-client-0348323359-default-rtdb.firebaseio.com');
 
@@ -71,67 +62,19 @@ export function cleanForFirebase<T extends Record<string, any>>(obj: T): T {
   return cleaned as T;
 }
 
-// Generic helper to prevent Firebase writes from hanging indefinitely when database is blocked or offline
-const runWithTimeout = <T>(promise: Promise<T>, timeoutMs: number = 3000): Promise<T> => {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('Firebase operation timeout')), timeoutMs)
-    ),
-  ]);
-};
-
 // Dual-Engine Firebase Service (Firestore + Realtime Database)
 export const firestoreService = {
   // Real-time listener for live sync across all devices
   subscribeToPrompts: (callback: (prompts: PromptItem[]) => void) => {
     let unsubscribed = false;
-    let unsubscribeFirestore: (() => void) | null = null;
-    let unsubscribeRTDB: (() => void) | null = null;
 
-    const setupRTDBListener = () => {
-      try {
-        console.log('🔗 Connecting to Realtime Database (RTDB) sync engine...');
-        const rtdbPromptsRef = rtdbRef(rtdb, 'prompts');
-        unsubscribeRTDB = rtdbOnValue(
-          rtdbPromptsRef,
-          (snapshot) => {
-            if (!unsubscribed) {
-              const list: PromptItem[] = [];
-              const data = snapshot.val();
-              if (data && typeof data === 'object') {
-                Object.keys(data).forEach((id) => {
-                  list.push({
-                    ...data[id],
-                    id: id,
-                  });
-                });
-              }
-              list.sort((a, b) => {
-                // Sort featured/pinned first, then by createdAt descending
-                if (a.isFeatured && !b.isFeatured) return -1;
-                if (!a.isFeatured && b.isFeatured) return 1;
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-              });
-              callback(list);
-            }
-          },
-          (rtdbErr) => {
-            console.warn('RTDB listen subscription notice:', rtdbErr);
-          }
-        );
-      } catch (err) {
-        console.warn('Failed to bind RTDB fallback listener:', err);
-      }
-    };
-
-    // Subscribe to Firestore as the single real-time source of truth
+    // 1. Subscribe to Firestore
     try {
       const promptsCol = collection(db, 'prompts');
-      unsubscribeFirestore = onSnapshot(
+      const unsubscribeFirestore = onSnapshot(
         promptsCol,
         (snapshot) => {
-          if (!unsubscribed) {
+          if (!snapshot.empty && !unsubscribed) {
             const list: PromptItem[] = [];
             snapshot.forEach((docSnap) => {
               const data = docSnap.data();
@@ -140,55 +83,70 @@ export const firestoreService = {
                 id: docSnap.id,
               });
             });
-            list.sort((a, b) => {
-              if (a.isFeatured && !b.isFeatured) return -1;
-              if (!a.isFeatured && b.isFeatured) return 1;
-              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-            });
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             callback(list);
           }
         },
         (error) => {
-          // If Firestore is exhausted/quota limit hit, immediately switch to RTDB!
-          console.warn('Firestore subscription restricted (quota or connection). Switching to Realtime Database engine...', error);
-          if (!unsubscribed && !unsubscribeRTDB) {
-            setupRTDBListener();
-          }
+          console.warn('Firestore subscription notice:', error);
         }
       );
-    } catch (e) {
-      console.warn('Firestore connection failed on subscribe. Swapping to RTDB...', e);
-      if (!unsubscribed && !unsubscribeRTDB) {
-        setupRTDBListener();
-      }
-    }
 
-    return () => {
-      unsubscribed = true;
-      if (unsubscribeFirestore) unsubscribeFirestore();
-      if (unsubscribeRTDB) unsubscribeRTDB();
-    };
+      // 2. Also listen to Realtime Database at https://gen-lang-client-0348323359-default-rtdb.firebaseio.com/
+      try {
+        const promptsRtdbRef = rtdbRef(rtdb, 'prompts');
+        const unsubscribeRtdb = rtdbOnValue(
+          promptsRtdbRef,
+          (snapshot) => {
+            if (snapshot.exists() && !unsubscribed) {
+              const val = snapshot.val();
+              const list: PromptItem[] = Object.keys(val).map((k) => ({
+                ...val[k],
+                id: val[k].id || k,
+              }));
+              list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              callback(list);
+            }
+          },
+          (err) => {
+            console.warn('RTDB subscription notice:', err);
+          }
+        );
+
+        return () => {
+          unsubscribed = true;
+          unsubscribeFirestore();
+          unsubscribeRtdb();
+        };
+      } catch (e) {
+        return () => {
+          unsubscribed = true;
+          unsubscribeFirestore();
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to subscribe to firestore:', e);
+      return () => {
+        unsubscribed = true;
+      };
+    }
   },
 
-  // Save prompt to BOTH Firestore & Realtime Database with strict timeouts
+  // Save prompt to BOTH Firestore & Realtime Database
   savePrompt: async (prompt: PromptItem): Promise<boolean> => {
     try {
       const sanitized = cleanForFirebase(prompt);
 
-      // 1. Save to Firestore (max 3 seconds)
-      try {
-        const docRef = doc(db, 'prompts', sanitized.id);
-        await runWithTimeout(setDoc(docRef, sanitized, { merge: true }), 3000);
-      } catch (fsErr) {
-        console.warn('Firestore write timed out or failed, proceeding to RTDB backup...', fsErr);
-      }
+      // 1. Save to Firestore
+      const docRef = doc(db, 'prompts', sanitized.id);
+      await setDoc(docRef, sanitized, { merge: true });
 
-      // 2. Save to Realtime Database (max 2 seconds)
+      // 2. Save to Realtime Database
       try {
         const itemRef = rtdbRef(rtdb, `prompts/${sanitized.id}`);
-        await runWithTimeout(rtdbSet(itemRef, sanitized), 2000);
+        await rtdbSet(itemRef, sanitized);
       } catch (rtdbErr) {
-        console.warn('Realtime database sync timed out or note:', rtdbErr);
+        console.warn('Realtime database sync note:', rtdbErr);
       }
 
       return true;
@@ -198,21 +156,15 @@ export const firestoreService = {
     }
   },
 
-  // Delete prompt from BOTH Firestore & Realtime Database with strict timeouts
+  // Delete prompt from BOTH Firestore & Realtime Database
   deletePrompt: async (promptId: string): Promise<boolean> => {
     try {
-      // 1. Delete from Firestore (max 2.5 seconds)
-      try {
-        const docRef = doc(db, 'prompts', promptId);
-        await runWithTimeout(deleteDoc(docRef), 2500);
-      } catch (fsErr) {
-        console.warn('Firestore delete timed out or failed, proceeding to RTDB...', fsErr);
-      }
+      const docRef = doc(db, 'prompts', promptId);
+      await deleteDoc(docRef);
 
-      // 2. Delete from Realtime Database (max 2 seconds)
       try {
         const itemRef = rtdbRef(rtdb, `prompts/${promptId}`);
-        await runWithTimeout(rtdbRemove(itemRef), 2000);
+        await rtdbRemove(itemRef);
       } catch (rtdbErr) {
         console.warn('Realtime database remove note:', rtdbErr);
       }
@@ -224,25 +176,21 @@ export const firestoreService = {
     }
   },
 
-  // Update prompt engagement counter (likes / copies / views) with timeouts
+  // Update prompt engagement counter (likes / copies / views)
   incrementEngagement: async (
     promptId: string,
     field: 'likes' | 'copyCount' | 'views',
     newValue: number
   ) => {
     try {
-      try {
-        const docRef = doc(db, 'prompts', promptId);
-        await runWithTimeout(updateDoc(docRef, { [field]: newValue }), 2000);
-      } catch (e) {
-        console.warn('Firestore engagement update skipped:', e);
-      }
+      const docRef = doc(db, 'prompts', promptId);
+      await updateDoc(docRef, { [field]: newValue });
 
       try {
         const fieldRef = rtdbRef(rtdb, `prompts/${promptId}/${field}`);
-        await runWithTimeout(rtdbSet(fieldRef, newValue), 1500);
+        await rtdbSet(fieldRef, newValue);
       } catch (e) {
-        console.warn('RTDB engagement update skipped:', e);
+        // ignore
       }
     } catch (err) {
       console.warn('Failed to update engagement on Firebase:', err);
@@ -266,33 +214,6 @@ export const firestoreService = {
       }
     } catch (err) {
       console.warn('Syncing prompts to Firebase note:', err);
-    }
-  },
-
-  // Permanent, serverless cloud upload to Firebase Storage with strict 2-second timeout
-  uploadImageToStorage: async (imageBase64: string): Promise<string> => {
-    if (!imageBase64 || !imageBase64.startsWith('data:image/')) {
-      return imageBase64;
-    }
-    try {
-      const storageInstance = getStorage(app);
-      const filename = `prompts/img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
-      const fileRef = sRef(storageInstance, filename);
-      
-      const uploadPromise = (async () => {
-        const uploadResult = await uploadString(fileRef, imageBase64, 'data_url');
-        const downloadUrl = await getDownloadURL(uploadResult.ref);
-        return downloadUrl;
-      })();
-
-      const timeoutPromise = new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Firebase Storage upload timeout (2s)')), 2000)
-      );
-
-      return await Promise.race([uploadPromise, timeoutPromise]);
-    } catch (err) {
-      console.warn('Firebase Storage upload timed out, disabled, or failed. Swapping to backup:', err);
-      throw err;
     }
   },
 };
