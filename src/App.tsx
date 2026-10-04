@@ -7,8 +7,6 @@ import { AdSenseBlock } from './components/AdSenseBlock';
 import { CopyAdModal } from './components/CopyAdModal';
 import { PromptDetailModal } from './components/PromptDetailModal';
 import { GeminiPromptStudio } from './components/GeminiPromptStudio';
-import { AdminLoginModal } from './components/admin/AdminLoginModal';
-import { AdminDashboard } from './components/admin/AdminDashboard';
 import { QuickPostModal } from './components/QuickPostModal';
 import { AnimeLogo } from './components/AnimeLogo';
 import { ThakurgaonLogo } from './components/ThakurgaonLogo';
@@ -512,7 +510,7 @@ const GalleryView: React.FC = () => {
         {filteredPrompts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPrompts.map((prompt, idx) => (
-              <React.Fragment key={prompt.id}>
+              <React.Fragment key={`${prompt.id}-${idx}`}>
                 <PromptCard prompt={prompt} />
 
                 {/* In-feed sponsored banner ad after every 3 items if enabled */}
@@ -563,13 +561,6 @@ const GalleryView: React.FC = () => {
               </svg>
               <span>Facebook Page</span>
             </a>
-            <span>·</span>
-            <button
-              onClick={() => setIsAdminOpen(true)}
-              className="hover:text-[#ea8754] font-medium cursor-pointer"
-            >
-              {isBn ? 'এডমিন লগইন' : 'Admin Login'}
-            </button>
           </div>
         </div>
       </footer>
@@ -579,8 +570,6 @@ const GalleryView: React.FC = () => {
       <PromptDetailModal />
       <GeminiPromptStudio />
       <QuickPostModal isOpen={isQuickPostOpen} onClose={() => setIsQuickPostOpen(false)} />
-      <AdminLoginModal />
-      <AdminDashboard />
 
       {/* Global Toast Notification */}
       {toastMessage && (

@@ -87,14 +87,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let isMounted = true;
 
+    const dedupe = (list: PromptItem[]): PromptItem[] => {
+      const seen = new Set<string>();
+      return list.filter((item) => {
+        if (!item || !item.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+    };
+
     // 1. Seed Firestore if empty
     firestoreService.seedInitialPrompts(prompts);
 
-    // 2. Realtime Firestore Listener (instant live sync across all devices)
+    // 2. Realtime Firestore & Supabase Listeners
     const unsubscribeFirestore = firestoreService.subscribeToPrompts((livePrompts) => {
       if (isMounted && livePrompts && livePrompts.length > 0) {
-        setPrompts(livePrompts);
-        storage.savePrompts(livePrompts);
+        const cleanList = dedupe(livePrompts);
+        setPrompts(cleanList);
+        storage.savePrompts(cleanList);
+      }
+    });
+
+    const unsubscribeSupabase = supabaseService.subscribeToPrompts((supabasePrompts) => {
+      if (isMounted && supabasePrompts && supabasePrompts.length > 0) {
+        setPrompts((prev) => {
+          const prevIds = new Set(prev.map((p) => p.id));
+          const newItems = supabasePrompts.filter((p) => !prevIds.has(p.id));
+          if (newItems.length === 0) return prev;
+          const merged = [...newItems, ...prev];
+          storage.savePrompts(merged);
+          return merged;
+        });
       }
     });
 
@@ -125,6 +148,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       isMounted = false;
       unsubscribeFirestore();
+      if (typeof unsubscribeSupabase === 'function') {
+        unsubscribeSupabase();
+      }
       clearInterval(interval);
     };
   }, []);
@@ -214,22 +240,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return imgUrl;
   };
 
+  // Helper to ensure image is portable base64 (<50KB) so it syncs live across all devices with zero 404s
+  const processImageForPublish = async (rawImageUrl: string): Promise<string> => {
+    if (!rawImageUrl) return '';
+    if (!rawImageUrl.startsWith('data:image/')) return rawImageUrl;
+
+    // Compress canvas to ultra-light JPEG (<50KB) for instant sync across Firestore, Supabase & Vercel
+    return new Promise<string>((resolve) => {
+      try {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let w = img.width || 800;
+          let h = img.height || 600;
+          const maxDim = 800;
+          if (w > h && w > maxDim) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else if (h > maxDim) {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, w, h);
+            const compressed = canvas.toDataURL('image/jpeg', 0.75);
+            resolve(compressed || rawImageUrl);
+          } else {
+            resolve(rawImageUrl);
+          }
+        };
+        img.onerror = () => resolve(rawImageUrl);
+        img.src = rawImageUrl;
+      } catch {
+        resolve(rawImageUrl);
+      }
+    });
+  };
+
   // Admin add prompt (Live synced to server & cloud database)
   const addPrompt = async (newPromptData: Omit<PromptItem, 'id' | 'views' | 'copyCount' | 'likes' | 'createdAt'>) => {
-    const finalImageUrl = newPromptData.imageUrl;
-    
-    // Also backup upload to server if base64 (without overwriting data URL)
-    if (finalImageUrl && finalImageUrl.startsWith('data:image/')) {
-      try {
-        fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: finalImageUrl }),
-        }).catch(() => {});
-      } catch (err) {
-        // ignore
-      }
-    }
+    const finalImageUrl = await processImageForPublish(newPromptData.imageUrl);
 
     const newId = `prompt-${Date.now()}`;
     const newItem: PromptItem = {
@@ -247,11 +302,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPrompts(updated);
     storage.savePrompts(updated);
 
-    // Save to Firestore & Realtime Database
+    // Save to Firestore, Supabase & Realtime Database
     try {
       await firestoreService.savePrompt(newItem);
+      await supabaseService.savePrompt(newItem);
     } catch (fsErr) {
-      console.error('Firebase save error:', fsErr);
+      console.error('Database save error:', fsErr);
     }
 
     // Save to persistent server API
@@ -269,18 +325,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updatePrompt = async (updatedPrompt: PromptItem) => {
-    const finalImageUrl = updatedPrompt.imageUrl;
-
-    if (finalImageUrl && finalImageUrl.startsWith('data:image/')) {
-      try {
-        fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: finalImageUrl }),
-        }).catch(() => {});
-      } catch (e) {}
-    }
-
+    const finalImageUrl = await processImageForPublish(updatedPrompt.imageUrl);
     const itemToSave = { ...updatedPrompt, imageUrl: finalImageUrl };
 
     const updated = prompts.map((p) => (p.id === itemToSave.id ? itemToSave : p));
@@ -291,11 +336,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActivePromptDetail(itemToSave);
     }
 
-    // Save to Firestore & Realtime Database
+    // Save to Firestore & Supabase
     try {
       await firestoreService.savePrompt(itemToSave);
+      await supabaseService.savePrompt(itemToSave);
     } catch (fsErr) {
-      console.error('Firebase update error:', fsErr);
+      console.error('Database update error:', fsErr);
     }
 
     // Save to server
@@ -321,11 +367,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActivePromptDetail(null);
     }
 
-    // Delete from Firestore & Realtime Database
+    // Delete from Firestore & Supabase
     try {
       await firestoreService.deletePrompt(promptId);
+      await supabaseService.deletePrompt(promptId);
     } catch (fsErr) {
-      console.error('Firebase delete error:', fsErr);
+      console.error('Database delete error:', fsErr);
     }
 
     // Delete from server

@@ -86,20 +86,6 @@ export const Navbar: React.FC = () => {
             <span>{isBn ? 'পোস্ট করুন' : 'Daftar Post'}</span>
           </button>
 
-          {/* Admin Panel Button */}
-          <button
-            onClick={() => setIsAdminOpen(true)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full transition-colors cursor-pointer whitespace-nowrap ${
-              isAdminLoggedIn
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                : 'bg-white text-[#6c5a52] hover:text-[#ea8754] border border-orange-200/70 shadow-2xs'
-            }`}
-            title={isBn ? 'এডমিন প্যানেল' : 'Admin Panel'}
-          >
-            <Shield size={13} className="text-[#ea8754]" />
-            <span className="hidden sm:inline">{isBn ? 'এডমিন' : 'Admin'}</span>
-          </button>
-
           {/* Language Switcher */}
           <button
             onClick={() => setLanguage(isBn ? 'en' : 'bn')}

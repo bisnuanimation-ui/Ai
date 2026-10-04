@@ -11,9 +11,9 @@
  */
 export async function compressImage(
   file: File,
-  maxWidth = 1280,
-  maxHeight = 1280,
-  quality = 0.85
+  maxWidth = 900,
+  maxHeight = 900,
+  quality = 0.78
 ): Promise<string> {
   return new Promise((resolve) => {
     try {
