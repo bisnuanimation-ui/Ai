@@ -24,10 +24,16 @@ export const AdSenseBlock: React.FC<AdSenseBlockProps> = ({
   const isBn = language === 'bn';
   const pubId = adSettings.adsensePublisherId || 'ca-pub-9855677661793723';
 
+  const pushedRef = useRef(false);
+
   useEffect(() => {
+    if (pushedRef.current) return;
+    pushedRef.current = true;
+
     try {
-      if (window.adsbygoogle) {
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      if (typeof window !== 'undefined') {
+        window.adsbygoogle = window.adsbygoogle || [];
+        window.adsbygoogle.push({});
       }
     } catch (e) {
       console.warn('AdSense push error or adblocker detected:', e);

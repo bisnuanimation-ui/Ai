@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { X, Copy, Heart, Sparkles, Sliders, Layers, Eye, Share2 } from 'lucide-react';
+import { AdSenseBlock } from './AdSenseBlock';
 
 export const PromptDetailModal: React.FC = () => {
   const {
@@ -128,6 +129,9 @@ export const PromptDetailModal: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* AdSense Unit in Detail Modal */}
+            <AdSenseBlock slot="8920194812" format="horizontal" />
 
             {/* Technical Parameters Grid */}
             <div className="pt-2 border-t border-slate-800/80">

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PromptItem, AdCampaign, AdSettings, AdAnalytics, Language } from '../types';
 import { storage } from '../services/storage';
 import { firestoreService } from '../services/firebase';
+import { supabaseService } from '../services/supabase';
 import { copyToClipboard } from '../utils/clipboard';
 
 interface AppContextType {
@@ -59,11 +60,32 @@ interface AppContextType {
   showToast: (msg: string) => void;
 }
 
+// Helper to deduplicate array of prompts by ID
+const deduplicatePrompts = (items: PromptItem[]): PromptItem[] => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (!item || !item.id) return false;
+    if (seen.has(item.id)) {
+      return false;
+    }
+    seen.add(item.id);
+    return true;
+  });
+};
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>('bn');
-  const [prompts, setPrompts] = useState<PromptItem[]>(() => storage.getPrompts());
+  const [prompts, setPromptsRaw] = useState<PromptItem[]>(() => deduplicatePrompts(storage.getPrompts()));
+
+  const setPrompts = (updater: PromptItem[] | ((prev: PromptItem[]) => PromptItem[])) => {
+    setPromptsRaw((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      return deduplicatePrompts(next);
+    });
+  };
+
   const [categories, setCategories] = useState(() => storage.getCategories());
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -91,7 +113,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 2. Realtime Firestore Listener (instant live sync across all devices)
     const unsubscribeFirestore = firestoreService.subscribeToPrompts((livePrompts) => {
-      if (isMounted && livePrompts && livePrompts.length > 0) {
+      if (isMounted && livePrompts) {
         setPrompts(livePrompts);
         storage.savePrompts(livePrompts);
       }
@@ -104,14 +126,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (res.ok) {
           const serverData = await res.json();
           if (Array.isArray(serverData) && serverData.length > 0 && isMounted) {
-            setPrompts((current) => {
-              const currentIds = new Set(current.map((p) => p.id));
-              const newItems = serverData.filter((p: PromptItem) => !currentIds.has(p.id));
-              if (newItems.length === 0) return current;
-              const merged = [...current, ...newItems];
-              storage.savePrompts(merged);
-              return merged;
-            });
+            setPrompts(serverData);
+            storage.savePrompts(serverData);
           }
         }
       } catch (err) {
@@ -193,9 +209,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAnalytics({ ...newAnalytics });
   };
 
-  // Helper to upload image if it's base64 data URL
+  // Helper to upload image permanently to cloud with multiple fallback layers
   const uploadImageIfNeeded = async (imgUrl: string): Promise<string> => {
     if (imgUrl && imgUrl.startsWith('data:image/')) {
+      // 1. Try to upload permanently to Supabase Storage first ('Bisun Roy' Bucket)
+      try {
+        const supabaseUrl = await supabaseService.uploadImageToSupabase(imgUrl);
+        if (supabaseUrl && supabaseUrl.startsWith('http') && !supabaseUrl.startsWith('data:')) {
+          return supabaseUrl;
+        }
+      } catch (err) {
+        console.warn('Supabase Storage upload skipped/failed, trying Firebase Storage...', err);
+      }
+
+      // 2. Try Firebase Storage
+      try {
+        const cloudUrl = await firestoreService.uploadImageToStorage(imgUrl);
+        if (cloudUrl && cloudUrl.startsWith('http') && !cloudUrl.startsWith('data:')) {
+          return cloudUrl;
+        }
+      } catch (err) {
+        console.warn('Firebase Storage upload skipped, trying server API fallback...', err);
+      }
+
+      // 3. Fallback to server /api/upload
       try {
         const res = await fetch('/api/upload', {
           method: 'POST',
@@ -215,20 +252,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Admin add prompt (Live synced to server & cloud database)
   const addPrompt = async (newPromptData: Omit<PromptItem, 'id' | 'views' | 'copyCount' | 'likes' | 'createdAt'>) => {
-    const finalImageUrl = newPromptData.imageUrl;
-    
-    // Also backup upload to server if base64 (without overwriting data URL)
-    if (finalImageUrl && finalImageUrl.startsWith('data:image/')) {
-      try {
-        fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: finalImageUrl }),
-        }).catch(() => {});
-      } catch (err) {
-        // ignore
-      }
-    }
+    showToast(language === 'bn' ? 'ছবি ও ডাটা প্রসেস করা হচ্ছে...' : 'Processing image & data...');
+    const finalImageUrl = await uploadImageIfNeeded(newPromptData.imageUrl);
 
     const newId = `prompt-${Date.now()}`;
     const newItem: PromptItem = {
@@ -240,11 +265,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       likes: 0,
       createdAt: new Date().toISOString(),
     };
-
-    // Optimistic local update
-    const updated = [newItem, ...prompts.filter(p => p.id !== newId)];
-    setPrompts(updated);
-    storage.savePrompts(updated);
 
     // Save to Firestore & Realtime Database
     try {
@@ -264,31 +284,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Server sync error on add prompt', err);
     }
 
+    // Set local state
+    setPrompts((current) => [newItem, ...current.filter((p) => p.id !== newId)]);
+
     showToast(language === 'bn' ? '✓ নতুন প্রম্পট ও ছবি সফলভাবে পাবলিশ হয়েছে!' : '✓ New AI prompt published successfully!');
   };
 
   const updatePrompt = async (updatedPrompt: PromptItem) => {
-    const finalImageUrl = updatedPrompt.imageUrl;
-
-    if (finalImageUrl && finalImageUrl.startsWith('data:image/')) {
-      try {
-        fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: finalImageUrl }),
-        }).catch(() => {});
-      } catch (e) {}
-    }
+    showToast(language === 'bn' ? 'ছবি ও ডাটা আপডেট করা হচ্ছে...' : 'Updating image & data...');
+    const finalImageUrl = await uploadImageIfNeeded(updatedPrompt.imageUrl);
 
     const itemToSave = { ...updatedPrompt, imageUrl: finalImageUrl };
-
-    const updated = prompts.map((p) => (p.id === itemToSave.id ? itemToSave : p));
-    setPrompts(updated);
-    storage.savePrompts(updated);
-
-    if (activePromptDetail?.id === itemToSave.id) {
-      setActivePromptDetail(itemToSave);
-    }
 
     // Save to Firestore & Realtime Database
     try {
@@ -306,6 +312,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch (err) {
       console.warn('Server sync error on update', err);
+    }
+
+    setPrompts((current) => current.map((p) => (p.id === itemToSave.id ? itemToSave : p)));
+
+    if (activePromptDetail?.id === itemToSave.id) {
+      setActivePromptDetail(itemToSave);
     }
 
     showToast(language === 'bn' ? '✓ প্রম্পট আপডেট হয়েছে' : '✓ Prompt updated');

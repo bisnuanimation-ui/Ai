@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/Navbar';
 import { PromptCard } from './components/PromptCard';
 import { BannerAd } from './components/BannerAd';
+import { AdSenseBlock } from './components/AdSenseBlock';
 import { CopyAdModal } from './components/CopyAdModal';
 import { PromptDetailModal } from './components/PromptDetailModal';
 import { GeminiPromptStudio } from './components/GeminiPromptStudio';
@@ -460,7 +461,10 @@ const GalleryView: React.FC = () => {
       </section>
 
       {/* Main Content Feed */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 py-8 w-full">
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 py-8 w-full space-y-6">
+        {/* Top Featured Google AdSense Block */}
+        <AdSenseBlock slot="8920194812" format="horizontal" />
+
         {/* Informative How-It-Works Notice Banner */}
         <div className="mb-6 p-4 bg-white border border-orange-200/80 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-xs">
           <div className="flex items-center gap-2.5 text-[#6c5a52]">

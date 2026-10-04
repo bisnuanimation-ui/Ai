@@ -65,6 +65,7 @@ export const AdminDashboard: React.FC = () => {
   const [formTags, setFormTags] = useState('AI, Midjourney, Art');
   const [formSeed, setFormSeed] = useState('84920194');
   const [formCfgScale, setFormCfgScale] = useState(7.0);
+  const [formIsFeatured, setFormIsFeatured] = useState(false);
   const [isAiEnhancing, setIsAiEnhancing] = useState(false);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
@@ -113,6 +114,7 @@ export const AdminDashboard: React.FC = () => {
     setFormTags('AI, Cyberpunk, Art');
     setFormSeed(Math.floor(Math.random() * 90000000 + 10000000).toString());
     setFormCfgScale(7.0);
+    setFormIsFeatured(false);
     setEditingPromptId(null);
     setIsAddingPrompt(true);
   };
@@ -129,6 +131,7 @@ export const AdminDashboard: React.FC = () => {
     setFormTags(p.tags ? p.tags.join(', ') : '');
     setFormSeed(p.seed || '');
     setFormCfgScale(p.cfgScale || 7.0);
+    setFormIsFeatured(p.isFeatured || false);
     setEditingPromptId(p.id);
     setIsAddingPrompt(true);
   };
@@ -183,6 +186,7 @@ export const AdminDashboard: React.FC = () => {
             tags: tagsArray.length > 0 ? tagsArray : ['AI', 'Art'],
             seed: formSeed.trim() || '',
             cfgScale: Number(formCfgScale) || 7.0,
+            isFeatured: formIsFeatured,
           };
           await updatePrompt(updatedItem);
         }
@@ -199,7 +203,7 @@ export const AdminDashboard: React.FC = () => {
           tags: tagsArray.length > 0 ? tagsArray : ['AI', 'Art'],
           seed: formSeed.trim() || '',
           cfgScale: Number(formCfgScale) || 7.0,
-          isFeatured: true,
+          isFeatured: formIsFeatured,
         };
         await addPrompt(newItemPayload);
       }
@@ -506,6 +510,16 @@ export const AdminDashboard: React.FC = () => {
                     </button>
                   </div>
 
+                  {/* Writable graphics upload notice banner requested by user */}
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
+                    <span className="text-amber-400 text-sm mt-0.5">💡</span>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed font-medium">
+                      {isBn 
+                        ? 'এডমিন নোটিশ: আপনি সরাসরি আপনার পিসি বা মোবাইল থেকে যেকোনো এআই জেনারেটেড ছবি বা গ্রাফিক্স এখানে আপলোড করতে পারবেন। আপলোডকৃত ছবি স্বয়ংক্রিয়ভাবে প্রসেস হয়ে লাইভ গ্যালারিতে যুক্ত হবে!'
+                        : 'Admin Notice: You can upload any AI-generated graphics or artwork from your device. Files will be optimized automatically and saved instantly!'}
+                    </p>
+                  </div>
+
                   {/* Photo Upload Section */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -619,101 +633,28 @@ export const AdminDashboard: React.FC = () => {
                     />
                   </div>
 
-                  {/* Negative Prompt */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {isBn ? 'নেগেটিভ প্রম্পট (Negative Prompt):' : 'Negative Prompt:'}
-                    </label>
-                    <input
-                      type="text"
-                      value={formNegativePrompt}
-                      onChange={(e) => setFormNegativePrompt(e.target.value)}
-                      placeholder="blurry, low resolution, deformed limbs, watermark"
-                      className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-rose-200/90 placeholder-slate-500 focus:outline-hidden focus:border-amber-400"
-                    />
-                  </div>
-
-                  {/* Model, Category, Aspect Ratio Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                        AI Model:
-                      </label>
-                      <select
-                        value={formModel}
-                        onChange={(e) => setFormModel(e.target.value as AIModel)}
-                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white"
-                      >
-                        <option value="Midjourney v6">Midjourney v6</option>
-                        <option value="Flux.1 Schnell">Flux.1 Schnell</option>
-                        <option value="Stable Diffusion XL">Stable Diffusion XL</option>
-                        <option value="DALL-E 3">DALL-E 3</option>
-                        <option value="Google Imagen 3">Google Imagen 3</option>
-                        <option value="Leonardo Phoenix">Leonardo Phoenix</option>
-                      </select>
+                  {/* Pin to Top Toggle (পিন করে রাখা) */}
+                  <div className="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
+                    <div className="pr-4">
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Star size={14} className="text-amber-400 fill-amber-400 animate-pulse" />
+                        <span>{isBn ? 'গ্যালারির প্রথমে পিন (Pin to Top) করে রাখুন' : 'Pin to Top of Gallery'}</span>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                        {isBn 
+                          ? 'এই অপশনটি চালু করলে ছবিটি আপনার গ্যালারির সবার প্রথমে পিনড (Pinned) অবস্থায় থাকবে।' 
+                          : 'This will highlight and pin this specific artwork at the very top of your gallery.'}
+                      </p>
                     </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                        Category:
-                      </label>
-                      <select
-                        value={formCategory}
-                        onChange={(e) => setFormCategory(e.target.value)}
-                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white capitalize"
-                      >
-                        {categories
-                          .filter((c) => c.id !== 'all')
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {isBn ? c.nameBn : c.nameEn}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                        Aspect Ratio:
-                      </label>
-                      <select
-                        value={formAspectRatio}
-                        onChange={(e) => setFormAspectRatio(e.target.value as AspectRatio)}
-                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white"
-                      >
-                        <option value="4:3">4:3 (Landscape)</option>
-                        <option value="16:9">16:9 (Widescreen)</option>
-                        <option value="1:1">1:1 (Square)</option>
-                        <option value="9:16">9:16 (Story / Mobile)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                        Seed / CFG:
-                      </label>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
                       <input
-                        type="text"
-                        value={formSeed}
-                        onChange={(e) => setFormSeed(e.target.value)}
-                        placeholder="84920194"
-                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white font-mono"
+                        type="checkbox"
+                        checked={formIsFeatured}
+                        onChange={(e) => setFormIsFeatured(e.target.checked)}
+                        className="sr-only peer"
                       />
-                    </div>
-                  </div>
-
-                  {/* Tags */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      {isBn ? 'ট্যাগ সমূহ (কমা দিয়ে আলাদা করুন):' : 'Tags (comma-separated):'}
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                     </label>
-                    <input
-                      type="text"
-                      value={formTags}
-                      onChange={(e) => setFormTags(e.target.value)}
-                      placeholder="Cyberpunk, Neon, 8K, Tiger"
-                      className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-amber-400"
-                    />
                   </div>
 
                   <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
@@ -1183,13 +1124,13 @@ export const AdminDashboard: React.FC = () => {
                       <input
                         type="text"
                         readOnly
-                        value="ca-pub-9855677661793723"
+                        value="wV2kg11Wb4oJA6lUHjU-93nyoirq7DizaHjqxIPk46U"
                         className="flex-1 p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-white select-all"
                       />
                       <button
                         type="button"
                         onClick={async () => {
-                          await copyToClipboard('ca-pub-9855677661793723');
+                          await copyToClipboard('wV2kg11Wb4oJA6lUHjU-93nyoirq7DizaHjqxIPk46U');
                           showToast(isBn ? '✓ ভেরিফিকেশন কোড কপি হয়েছে!' : '✓ Verification code copied!');
                         }}
                         className="px-3 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1"
